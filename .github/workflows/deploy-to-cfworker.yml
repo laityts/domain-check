@@ -14,8 +14,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PASSWORD: ${{ secrets.PASSWORD }}
-      TGID: ${{ secrets.TGID }}
-      TGTOKEN: ${{ secrets.TGTOKEN }}
+      TGID: ${{ secrets.TGID}}
+      TGTOKEN: ${{ secrets.TGTOKEN}}
       CF_KV_ID: ${{ secrets.CF_KV_ID }}
       CF_CRONS: ${{ secrets.CF_CRONS || '0 1,13 * * *' }}
     
@@ -31,7 +31,7 @@ jobs:
       - name: 🆙 更新并安装最新 Wrangler
         run: npm install -g wrangler@latest
     
-      - name: 🔄 替换wrangler.toml中的变量
+      - name: 🔄 替换 wrangler.toml 中的变量
         id: config_setup
         run: |
           sed -i "s#{CF_KV_ID}#${CF_KV_ID}#g" wrangler.toml
@@ -39,7 +39,7 @@ jobs:
           
           WORKER_NAME=$(grep '^name =' wrangler.toml | awk -F '"' '{print $2}')
           if [ -z "$WORKER_NAME" ]; then
-            echo "错误: 未能在 wrangler.toml 中找到 'name' 字段"; exit 1
+            echo "🔴 错误: 未能在 wrangler.toml 中找到 'name' 字段"; exit 1
           fi
           echo "🎉 项目名称: $WORKER_NAME"
           echo "worker_name=$WORKER_NAME" >> $GITHUB_OUTPUT
@@ -47,16 +47,29 @@ jobs:
           echo "–––––––––––––––––––––––"
           cat wrangler.toml
           echo "–––––––––––––––––––––––"
+
+      - name: ⚙️ 动态配置 Worker 环境变量
+        id: dynamic_vars
+        run: |
+          DYNAMIC_VARS="PASSWORD"
+
+          if [ -n "$TGID" ] && [ -n "$TGTOKEN" ]; then
+            echo "🟢 发现 TG 配置，将其添加到 Worker 环境变量"
+            DYNAMIC_VARS="${DYNAMIC_VARS}\nTGID\nTGTOKEN"
+          else
+            echo "⚠️ 警告: 未发现 TG 配置，TG 通知将不可用"
+          fi
+
+          echo "vars_list<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$DYNAMIC_VARS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
           
       - name: 🚀 部署到 CF Worker
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CF_API_TOKEN }}
           accountId: ${{ vars.CF_ACCOUNT_ID }}
-          vars: |
-            PASSWORD
-            TGID
-            TGTOKEN
+          vars: ${{ steps.dynamic_vars.outputs.vars_list }}
           
       - name: ✨ 输出 Worker 管理后台
         env:
