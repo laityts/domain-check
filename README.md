@@ -91,3 +91,6 @@ MIT License
 ## 贡献
 
 欢迎提交 Issue 和 Pull Request！
+
+## ⭐ Star 星星走起
+[![Star History Chart](https://api.star-history.com/svg?repos=yutian81/domain-check&type=date&legend=top-left)](https://www.star-history.com/#yutian81/domain-check&type=date&legend=top-left)
