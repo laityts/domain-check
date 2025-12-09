@@ -8,7 +8,7 @@ let currentFilteredDomains = []; // 存储当前过滤和搜索后的数据
 let currentPage = 1; // 默认显示第一页
 let currentGroup = '全部'; // 默认激活的分组
 let currentSearchTerm = ''; // 搜索框默认为空
-let currentStatusFilter = '全部'; // 默认显示的概览信息卡
+let currentStatusFilter = ''; // 概览信息卡默认为空
 let globalConfig = { daysThreshold: 30 }; // 默认30天内为将到期
 let lastOperatedDomain = null; // 存储最近操作的域名，用于临时置顶
 
@@ -199,16 +199,17 @@ function getDomainStatus(expirationDateStr) {
 }
 
 // 渲染域名信息概览
-function renderSummary() {
+function renderSummary(domainsList) {
     const summaryEl = document.getElementById('summary');
     if (!summaryEl) return;
 
-    const total = allDomains.length;
+    // 使用传入的列表来计算总数
+    const total = domainsList.length;
     let normalCount = 0;
     let expiringCount = 0;
     let expiredCount = 0;
 
-    allDomains.forEach(domain => {
+    domainsList.forEach(domain => {
         const { statusText } = getDomainStatus(domain.expirationDate);
         if (statusText === '正常') {
             normalCount++;
@@ -221,26 +222,27 @@ function renderSummary() {
 
     const usableCount = normalCount + expiringCount; // 状态“正常”和“将到期”的域名都视为“可用”
 
+    // 生成 HTML 并根据 currentStatusFilter 动态添加 active 类
     summaryEl.innerHTML = \`
-        <div class="summary-card" style="--color: #186db3;" data-filter="全部">
+        <div class="summary-card \${currentStatusFilter === '全部' ? 'active' : ''}" style="--color: #186db3;" data-filter="全部">
             <h3><i class="fa fa-list-ol"></i> 全部</h3>
             <p>\${total}</p>
         </div>
-        <div class="summary-card" style="--color: #1dab58;" data-filter="正常">
+        <div class="summary-card \${currentStatusFilter === '正常' ? 'active' : ''}" style="--color: #1dab58;" data-filter="正常">
             <h3><i class="fa fa-check"></i> 正常</h3>
             <p>\${usableCount}</p>
         </div>
-        <div class="summary-card" style="--color: #f39c12;" data-filter="将到期">
+        <div class="summary-card \${currentStatusFilter === '将到期' ? 'active' : ''}" style="--color: #f39c12;" data-filter="将到期">
             <h3><i class="fa fa-exclamation-triangle"></i> 将到期</h3>
             <p>\${expiringCount}</p>
         </div>
-        <div class="summary-card" style="--color: #e74c3c;" data-filter="已到期">
+        <div class="summary-card \${currentStatusFilter === '已到期' ? 'active' : ''}" style="--color: #e74c3c;" data-filter="已到期">
             <h3><i class="fa fa-times"></i> 已到期</h3>
             <p>\${expiredCount}</p>
         </div>
     \`;
 
-    // 绑定点击事件
+    // 重新绑定点击事件
     summaryEl.querySelectorAll('.summary-card').forEach(card => {
         card.addEventListener('click', handleSummaryClick);
     });
@@ -251,22 +253,22 @@ function handleSummaryClick(e) {
     const clickedCard = e.currentTarget;
     const filterValue = clickedCard.dataset.filter;
 
+    // 移除所有卡片的 active 状态
     document.querySelectorAll('#summary .summary-card').forEach(card => {
         card.classList.remove('active');
-    }); // 移除所有卡片的 active 状态
+    });
 
     clickedCard.classList.add('active'); // 为当前点击的卡片添加 active 状态
-    currentStatusFilter = filterValue; // 1. 更新状态筛选变量
+    currentStatusFilter = filterValue; // 更新状态筛选变量
     currentGroup = '全部'; // 将分组筛选重置为“全部”
 
+    // 移除分组标签的 active 状态
     document.querySelectorAll('#groupTabs .tab-btn').forEach(tab => {
         tab.classList.remove('active');
-    }); // 移除分组标签的 active 状态
-
-    const allTab = document.querySelector('#groupTabs .tab-btn[data-group="全部"]'); // 重新激活 "全部" 标签
-    if (allTab) {
-        allTab.classList.add('active');
-    }
+    });
+    // 重新激活 "全部" 标签
+    const allTab = document.querySelector('#groupTabs .tab-btn[data-group="全部"]');
+    if (allTab) { allTab.classList.add('active'); }
 
     currentPage = 1; // 重置页码并应用新的筛选
     applyFiltersAndSearch();
@@ -324,7 +326,7 @@ function handleTabClick(e) {
     clickedTab.classList.add('active');
 
     // 清除概览卡片的筛选状态
-    currentStatusFilter = '全部';
+    currentStatusFilter = '';
     const allSummaryCards = document.querySelectorAll('#summary .summary-card');
     allSummaryCards.forEach(card => {
         card.classList.remove('active');
@@ -498,22 +500,9 @@ function renderPagination() {
 
 // 应用状态、分组、搜索过滤、状态筛选
 function applyFiltersAndSearch() {
-    currentFilteredDomains = allDomains.filter(domain => {
-
-        // 1. 状态过滤
-        const { statusText } = getDomainStatus(domain.expirationDate);
-        let statusMatch = true;
-
-        if (currentStatusFilter !== '全部') {
-            if (currentStatusFilter === '正常') {
-                statusMatch = (statusText === '正常' || statusText === '将到期');
-            } else {
-                statusMatch = (statusText === currentStatusFilter);
-            }
-        }
-        if (!statusMatch) return false;
-
-        // 2. 分组过滤
+    // 通用的分组和搜索过滤逻辑
+    const commonFilters = (domain) => {
+        // 分组过滤 (Common)
         const domainGroups = (domain.groups || '').split(',').map(g => g.trim()).filter(g => g);
         const domainLevel = getDomainLevel(domain.domain);
         let groupMatch = true;
@@ -527,13 +516,11 @@ function applyFiltersAndSearch() {
         } else if (currentGroup !== '全部') {
             groupMatch = domainGroups.includes(currentGroup);
         }
-
         if (!groupMatch) return false;
 
-        // 2. 搜索过滤
+        // 搜索过滤 (Common)
         const searchTerm = currentSearchTerm.toLowerCase();
         if (searchTerm) {
-            // 只要以下任何一个字段包含搜索词，即返回 true
             return (
                 domain.domain.toLowerCase().includes(searchTerm) || // 域名
                 (domain.system || '').toLowerCase().includes(searchTerm) || // 注册商
@@ -541,8 +528,22 @@ function applyFiltersAndSearch() {
                 (domain.groups || '').toLowerCase().includes(searchTerm) // 分组
             );
         }
-
         return true;
+    };
+    
+    // 计算 domainsForSummary (应用通用过滤)
+    const domainsForSummary = allDomains.filter(commonFilters);
+    renderSummary(domainsForSummary);
+
+    // 计算 currentFilteredDomains (应用通用过滤 + 状态过滤)
+    currentFilteredDomains = domainsForSummary.filter(domain => {
+        const { statusText } = getDomainStatus(domain.expirationDate);
+        if (currentStatusFilter === '' || currentStatusFilter === '全部') { return true; }
+        if (currentStatusFilter === '正常') {
+            return (statusText === '正常' || statusText === '将到期');
+        } else {
+            return (statusText === currentStatusFilter);
+        }
     });
 
     renderDomainCards();
@@ -590,12 +591,11 @@ async function fetchDomains() {
             return systemA.localeCompare(systemB);
         });
 
-        lastOperatedDomain = null; // 清除临时置顶标记
-        renderSummary();
-        renderGroupTabs();
-        applyFiltersAndSearch(); // 首次渲染
-        currentStatusFilter = '全部';
-        currentGroup = '全部';
+        lastOperatedDomain = null; 
+        currentStatusFilter = ''; // 设置概览信息默认值为空
+        currentGroup = '全部'; // 分组默认激活 '全部'
+        renderGroupTabs(); // 渲染所有分组标签
+        applyFiltersAndSearch(); // 应用筛选，并负责渲染 Summary 和 DomainCards
         
     } catch (error) {
         console.error('获取域名失败:', error);
